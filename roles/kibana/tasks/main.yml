@@ -1,0 +1,69 @@
+---
+#
+# Installing Kibana
+#
+# Adds the apt-key
+- name: Add apt-key
+ apt_key:
+   url: "https://packages.elastic.co/GPG-KEY-elasticsearch"
+   state: present
+# Add the Elasticsearch APT-repository
+- name: Adding Elasticsearch APT repository
+ apt_repository:
+   repo: deb https://artifacts.elastic.co/packages/6.x/apt stable main
+   state: present
+# Install Kibana
+- name: Update repositories cache and install Kibana
+ apt:
+   name: kibana
+   update_cache: yes
+# Update kibana config file to only accept local connections
+- name: Updating the config file to restrict outside access
+ lineinfile:
+   destfile: /etc/kibana/kibana.yml
+   regexp: 'server.host:'
+   line: 'server.host: localhost'
+- name: Configure Kibana configuration file
+ template:
+   src=kibana.yml.j2
+   dest=/etc/kibana/kibana.yml
+   owner=root
+   group=root
+   mode=0644
+
+#Test if feature is installed
+- shell: "/usr/share/kibana/bin/kibana-plugin list | grep x-pack"
+  become: yes
+  register: x_pack_installed
+  changed_when: False
+  failed_when: "'ERROR' in x_pack_installed.stdout"
+  check_mode: no
+  ignore_errors: yes
+
+#Remove X-Pack if installed and its not been requested or the ES version has changed
+- name: Remove x-pack plugin
+  become: yes
+  command: "/usr/share/kibana/bin/kibana-plugin remove x-pack"
+  register: xpack_state
+  failed_when: "'ERROR' in xpack_state.stdout"
+  changed_when: xpack_state.rc == 0
+  when: x_pack_installed.rc == 0
+
+#Install plugin if not installed
+- name: Install x-pack plugin from local
+  become: yes
+  command: >
+    /usr/share/kibana/bin/kibana-plugin install --silent x-pack
+  register: xpack_state
+
+# Enable Kibana service
+- name: Enabling Kibana service
+ systemd:
+   name: kibana
+   enabled: yes
+   daemon_reload: yes
+# Start Kibana service
+- name: Starting Kibana service
+ systemd:
+   name: kibana
+   state: started

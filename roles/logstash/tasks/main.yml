@@ -1,0 +1,71 @@
+---
+#
+# Installing logstash
+#
+# Adds the apt-key
+- name: Add apt-key
+ apt_key:
+   url: "https://packages.elastic.co/GPG-KEY-elasticsearch"
+   state: present
+# Add the Elasticsearch APT-repository
+- name: Adding Elasticsearch APT repository
+ apt_repository:
+   repo: deb https://artifacts.elastic.co/packages/6.x/apt stable main
+   state: present'
+# Installing Logstash
+- name: Update repositories cache and install Logstash
+ apt:
+   name: logstash
+   update_cache: yes
+
+- name: Configure Logstash configuration file
+ template:
+   src=logstash.yml.j2
+   dest=/etc/logstash/logstash.yml
+   owner=root
+   group=root
+   mode=0644
+- name: Configure Logstash jvm.options file
+ template:
+   src=jvm.options.j2
+   dest=/etc/logstash/jvm.options
+   owner=root
+   group=root
+   mode=0644
+
+#Test if feature is installed
+- shell: "/usr/share/logstash/bin/logstash-plugin list | grep x-pack"
+  become: yes
+  register: x_pack_installed
+  changed_when: False
+  failed_when: "'ERROR' in x_pack_installed.stdout"
+  check_mode: no
+  ignore_errors: yes
+
+#Remove X-Pack if installed and its not been requested or the ES version has changed
+- name: Remove x-pack plugin
+  become: yes
+  command: "/usr/share/logstash/bin/logstash-plugin remove x-pack"
+  register: xpack_state
+  failed_when: "'ERROR' in xpack_state.stdout"
+  changed_when: xpack_state.rc == 0
+  when: x_pack_installed.rc == 0
+
+#Install plugin if not installed
+- name: Install x-pack plugin from local
+  become: yes
+  command: >
+    /usr/share/logstash/bin/logstash-plugin install --silent x-pack
+  register: xpack_state
+
+# Start Logstash service
+- name: Start Logstash service
+ systemd:
+   name: logstash
+   state: started
+   daemon_reload: yes
+# Enable Logstash service
+- name: Enable Logstash service
+ systemd:
+   name: logstash
+   enabled: yes
