@@ -44,7 +44,7 @@ Containing
 ```yaml
 all:
   node1:
-    ansible_host=127.0.0.1
+    ansible_host: 127.0.0.1
 ```
 
 ### Run a playbook
